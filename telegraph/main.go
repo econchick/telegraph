@@ -1,10 +1,10 @@
 package main
 
 import (
-    // "flag"
     "crypto/md5"
     "encoding/hex"
     "encoding/json"
+    "flag"
     "fmt"
     "io/ioutil"
     "os"
@@ -13,38 +13,93 @@ import (
     "time"
 )
 
+// Create a new type for a list of Strings (block files)
+type stringList []string
+
+// flag.Value interface for createCommand.Var
+func (s *stringList) String() string {
+    return fmt.Sprintf("%v", *s)
+}
+
+func (s *stringList) Set(value string) error {
+    *s = strings.Split(value, ",")
+    return nil
+}
+
 func main() {
     // showCommand := flag.NewFlagSet("show", flag.ExitOnError)
+    // subcommands
+    showCommand := flag.NewFlagSet("show", flag.ExitOnError)
+    createCommand := flag.NewFlagSet("create", flag.ExitOnError)
 
-    what := os.Args[1]
-    // command := os.Args[2]
+    // showCommand flags
+    jsonFile := showCommand.String("name", "", "JSON filename to show. (Required)")
+    showWhat := showCommand.String("what", "", "choices {block|chain} (Required)")
 
-    switch what {
-    // case "block":
-    //     switch command {
-    //     case "show":
-    //         block.Show()
-    //     case "create":
-    //         block.Create()
-    //     default:
-    //         fmt.Printf("%q is not valid command.\n", os.Args[1])
-    //         os.Exit(2)
-    //     }
-    // case "chain":
-    //     switch command {
-    //     case "show":
-    //         chain.Show()
-    //     case "create":
-    //         chain.Create()
-    //     default:
-    //         fmt.Printf("%q is not valid command.\n", os.Args[1])
-    //         os.Exit(2)
-    //     }
+    // createCommand flags
+    createWhat := createCommand.String("what", "", "choices {block|chain} (Required)")
+    payload := createCommand.String("payload", "", "payload text (Required for --what block)")
+    prevBlock := createCommand.String("prev", "", "path to previous block, if any")
+
+    var blockList stringList
+    createCommand.Var(&blockList, "blocks", "A comma seperated list of paths to JSON blocks for --what chain.")
+
+    command := os.Args[1]
+
+    switch command {
+    case "show":
+        showCommand.Parse(os.Args[2:])
+    case "create":
+        createCommand.Parse(os.Args[2:])
     case "demo":
         demo()
     default:
         fmt.Printf("%q is not valid command.\n", os.Args[1])
-        os.Exit(2)
+        os.Exit(1)
+    }
+
+    // Handle commands
+    if showCommand.Parsed() {
+        // Required Flags
+        if *jsonFile == "" {
+            showCommand.PrintDefaults()
+            os.Exit(1)
+        }
+        if *showWhat == "" {
+            showCommand.PrintDefaults()
+            os.Exit(1)
+        }
+        switch *showWhat {
+        case "block":
+            ShowBlock(*jsonFile)
+        // TODO: case chain
+        case "default":
+            fmt.Printf("%q is not valid subcommand.\n", *showWhat)
+            os.Exit(1)
+        }
+    }
+    if createCommand.Parsed() {
+        if *createWhat == "" {
+            createCommand.PrintDefaults()
+            os.Exit(1)
+        }
+        switch *createWhat {
+        case "block":
+            if *payload == "" {
+                createCommand.PrintDefaults()
+                os.Exit(1)
+            }
+            CreateBlock(*payload, *prevBlock)
+        case "chain":
+            if (&blockList).String() == "[]" {
+                createCommand.PrintDefaults()
+                os.Exit(1)
+            }
+            CreateChain(&blockList)
+        case "default":
+            fmt.Printf("%q is not valid subcommand.\n", *showWhat)
+            os.Exit(1)
+        }
     }
 }
 
@@ -233,6 +288,50 @@ func demo() {
     fmt.Println("Pretty printing the chain", c)
     c.PrettyPrint()
 
+    fmt.Println("Flip that and reverse it")
+    c.Reverse()
+    c.PrettyPrint()
+}
+
+// ShowBlock ...?
+func ShowBlock(path string) {
+    b := Load(path)
+    b.PrettyPrint()
+}
+
+// CreateBlock ...?
+func CreateBlock(payload string, prevBlock string) {
+    var b *Block
+    b = NewBlock(payload)
+
+    if prevBlock != "" {
+        p := Load(prevBlock)
+        b.PrevHash = p.Hash()
+    }
+    hash := b.Hash()
+    b.Dump(hash)
+}
+
+// CreateChain ...?
+func CreateChain(blocks *stringList) {
+    // TODO: this is b0rked - CLI order should not matter
+    c := NewLinkedBlockChain()
+
+    // what the fuck.
+    bstr := (blocks).String()
+    t := strings.Replace(bstr, "[", "", -1)
+    s := strings.Replace(t, "]", "", -1)
+    bslice := strings.Split(s, " ")
+
+    prevHash := ""
+    for _, blockFile := range bslice {
+        b := Load(blockFile)
+        b.PrevHash = prevHash
+        curHash := b.Hash()
+        c.AddBlock(b)
+        prevHash = curHash
+    }
+    c.PrettyPrint()
     fmt.Println("Flip that and reverse it")
     c.Reverse()
     c.PrettyPrint()
