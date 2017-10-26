@@ -1,3 +1,4 @@
+// Copyright (c) 2017 Nick Platt, Lynn Root
 package main
 
 import (
@@ -22,12 +23,12 @@ func (s *stringList) String() string {
 }
 
 func (s *stringList) Set(value string) error {
-    *s = strings.Split(value, ",")
+    // *s = strings.Split(value, ",")
+    *s = append(*s, value)
     return nil
 }
 
 func main() {
-    // showCommand := flag.NewFlagSet("show", flag.ExitOnError)
     // subcommands
     showCommand := flag.NewFlagSet("show", flag.ExitOnError)
     createCommand := flag.NewFlagSet("create", flag.ExitOnError)
@@ -317,22 +318,13 @@ func CreateChain(blocks *stringList) {
     // TODO: this is b0rked - CLI order should not matter
     c := NewLinkedBlockChain()
 
-    // what the fuck.
-    bstr := (blocks).String()
-    t := strings.Replace(bstr, "[", "", -1)
-    s := strings.Replace(t, "]", "", -1)
-    bslice := strings.Split(s, " ")
-
     prevHash := ""
-    for _, blockFile := range bslice {
+    for _, blockFile := range *blocks {
         b := Load(blockFile)
         b.PrevHash = prevHash
         curHash := b.Hash()
         c.AddBlock(b)
         prevHash = curHash
     }
-    c.PrettyPrint()
-    fmt.Println("Flip that and reverse it")
-    c.Reverse()
     c.PrettyPrint()
 }
